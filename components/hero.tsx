@@ -7,7 +7,7 @@ export default function Hero() {
       Master Long-Form Content - <br />One Text Message At A Time
       </p>
       <p className="text-md mx-auto text-center">
-      Have you been meaning to get to an article, pdf, or youtube video?<br /> No worries! Process it in 4 easy steps.
+      Need to catch up on an article, PDF, or YouTube video? No problem! Process it in just 4 easy steps
       </p>
       <Link
         href="/create"
