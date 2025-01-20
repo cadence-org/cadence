@@ -41,6 +41,7 @@ interface Submission {
   timezone: string;
   message_to_send: string | null;
   first_message_id: string | null;
+  reading_level: string;
 }
 
 interface TranscriptResponse {
@@ -54,12 +55,25 @@ const openai = wrapOpenAI(
   })
 );
 
+const readingLevelExamples: Record<string, string> = {
+  simple: `
+    - "🌱 Here's something cool: plants are basically solar-powered! They take sunlight and turn it into food using their leaves. The green color you see is from chlorophyll, which is like tiny solar panels inside the leaves."
+    - "💧 Water plays a huge role in photosynthesis! Plants drink it up from their roots and combine it with CO2 from the air. This chemical reaction helps create glucose - basically plant food!"
+  `,
+  balanced: `
+    - "🌱 During photosynthesis, inside the leaves, cholorophyll molecules absorb sunlight, which provides the energy needed to start the process. This energy helps split water molecules (H₂O) from the roots into oxygen (O₂) and hydrogen (H). The oxygen is released into the air, while the hydrogen is used to make energy-rich molecules like ATP and NADPH."
+    - "💧 Next, in the second stage of photosynthesis (the Calvin cycle), plants use the ATP and NADPH produced earlier to combine carbon dioxide (CO₂) from the air with other molecules in the chloroplast. This process gradually builds glucose, a type of sugar that the plant uses for energy and growth."
+  `,
+  detailed: `
+    - "🌱 In the light-dependent reactions of photosynthesis, photons of light are absorbed by chlorophyll molecules in the photosystems (PSI and PSII) located in the thylakoid membrane. This energy excites electrons, which are transferred through the electron transport chain (ETC), ultimately generating ATP and NADPH, which are essential for the Calvin cycle."
+    - "💧 The light-independent reactions (Calvin cycle) occur in the stroma of the chloroplast, where ribulose-1,5-bisphosphate carboxylase/oxygenase (RuBisCO) catalyzes the fixation of CO₂ into organic molecules. This cycle converts CO₂ into glucose through a series of enzymatic reactions, using ATP and NADPH produced in the light-dependent reactions."
+  `,
+};
+
 // Zod schema for GPT response
 const TextMessages = z.object({
   text_messages: z.array(z.string()),
 }) satisfies z.ZodType<{ text_messages: string[] }>;
-
-type TextMessagesType = z.infer<typeof TextMessages>;
 
 const cleanText = (text: string): string => {
   return text
@@ -212,7 +226,7 @@ async function processUnprocessedSubmissions(
   }
 }
 
-const splitIntoChunks = traceable(async (text: string): Promise<string[]> => {
+const splitIntoChunks = traceable(async (text: string, readingLevel: string): Promise<string[]> => {
   const gptModel = text.length > 120_000 ? "gpt-4o-mini" : "gpt-4o";
   console.log(`Using model: ${gptModel} to split text into chunks`);
 
@@ -233,8 +247,7 @@ const splitIntoChunks = traceable(async (text: string): Promise<string[]> => {
     Informational value can be determined based on the content. If its a blogpost or interview, capture the main essence, teachings and quotes. If its an academic paper, capture the main technique and results. If its a news article, capture the main events. and so on.
     
     For example, if given a technical article about photosynthesis, good text messages would be:
-     - "🌱 Here's something cool: plants are basically solar-powered! They take sunlight and turn it into food using their leaves. The green color you see is from chlorophyll, which is like tiny solar panels inside the leaves."
-     - "💧 Water plays a huge role in photosynthesis! Plants drink it up from their roots and combine it with CO2 from the air. This chemical reaction helps create glucose - basically plant food!"
+    ${readingLevelExamples[readingLevel]}
     `;
 
   try {
@@ -343,7 +356,7 @@ async function processSubmission(
       const fileBuffer = Buffer.from(await fileResponse.arrayBuffer());
       const pdfData = await pdfParse(fileBuffer);
       const cleanedText = cleanText(pdfData.text);
-      const chunks = await splitIntoChunks(cleanedText);
+      const chunks = await splitIntoChunks(cleanedText, submission.reading_level);
       allChunks = [...allChunks, ...chunks];
     }
   }
