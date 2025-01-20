@@ -2,15 +2,7 @@
 
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
-
-interface Submission {
-  submission_id: string;
-  text_field: string;
-  uploaded_files: string[];
-  cadence: string;
-  repeat: string;
-  created_at: Date;
-}
+import { Submission } from "@/utils/types";
 
 export async function handleGetSubmissions() {
   const supabase = await createClient();

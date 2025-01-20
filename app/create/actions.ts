@@ -4,16 +4,9 @@ import * as cheerio from "cheerio";
 import pdfParse from "pdf-parse";
 import { createClient } from "@/utils/supabase/server";
 import OpenAI from "openai";
-import { randomUUID } from "crypto";
 import { SupabaseClient } from "@supabase/supabase-js";
 import crypto from "crypto";
-import { zodResponseFormat } from "openai/helpers/zod";
-import { traceable } from "langsmith/traceable";
 import { wrapOpenAI } from "langsmith/wrappers";
-import { z } from "zod";
-import { processMessages } from "@/utils/messages";
-import { YoutubeTranscript } from "youtube-transcript";
-import { sendTextMessage } from "@/utils/twilio";
 
 const openai = wrapOpenAI(
   new OpenAI({

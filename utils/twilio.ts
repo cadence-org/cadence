@@ -1,6 +1,6 @@
 // utils/twilio.ts
 import { Twilio } from "twilio";
-
+import { Submission } from "@/utils/types";
 let twilioClient: Twilio | null = null;
 
 function getTwilioClient() {
@@ -13,10 +13,10 @@ function getTwilioClient() {
   return twilioClient;
 }
 
-export async function sendTextMessage(to: string, message: string) {
+export async function sendTextMessage(to: string, submission: Submission, message: string) {
   try {
     const client = getTwilioClient();
-    const formattedMessage = `${message}\n\n- Sent by Cadence`;
+    const formattedMessage = `${message}\n\n${submission.title ? `Title: ${submission.title}\n` : ""}Sent by: Cadence`;
     const result = await client.messages.create({
       body: formattedMessage,
       to,

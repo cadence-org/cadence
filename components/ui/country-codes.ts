@@ -60,7 +60,6 @@ export const countryCodes = [
   { code: "90", name: "Turkiye (+90)" },
   { code: "256", name: "Uganda (+256)" },
   { code: "380", name: "Ukraine (+380)" },
-  { code: "971", name: "United Arab Emirates (+971)" },
   { code: "44", name: "United Kingdom (+44)" },
   { code: "598", name: "Uruguay (+598)" },
   { code: "263", name: "Zimbabwe (+263)" },
