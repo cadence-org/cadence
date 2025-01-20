@@ -21,14 +21,7 @@ export async function handleGetSubmissions() {
   }
 
   const resp = data.map((submission) => {
-    return {
-      submission_id: submission.submission_id,
-      text_field: submission.text_field,
-      uploaded_files: submission.uploaded_files,
-      cadence: submission.cadence,
-      repeat: submission.repeat,
-      created_at: new Date(submission.created_at),
-    } as Submission;
+    return submission as Submission;
   });
 
   return resp;

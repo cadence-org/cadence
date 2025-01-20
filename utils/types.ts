@@ -4,6 +4,7 @@ type RepeatOption = "repeat-forever" | "do-not-repeat";
 export interface Submission {
     submission_id: string;
     user_id: string;
+    created_at: string;
     message_to_send: string;
     first_message_id: string;
     last_sent_time: string | null;
