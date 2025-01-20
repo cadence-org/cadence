@@ -35,15 +35,22 @@ export default function Hero() {
         </p>
       </div>
       <div className="flex flex-col gap-2">
-      <div className="text-2xl md:text-3xl font-bold text-center p-2">
+        <div className="text-2xl md:text-3xl font-bold text-center p-2">
           How Cadence Works?
         </div>
+        <p className="w-full flex flex-row justify-start text-lg mx-auto max-w-md font-bold">
+          👉🏾 Step 1
+        </p>
+        <p className="text-md mx-auto max-w-md">
+          Upload your content.
+        </p>
+      </div>
+      <div className="flex flex-col gap-2">
         <p className="w-full flex flex-row justify-start text-lg mx-auto max-w-md font-bold">
           👉🏾 Step 2
         </p>
         <p className="text-md mx-auto max-w-md">
-          Choose how often you’d like to receive text messages and decide if
-          you'd like the information to repeat for better retention.
+        Choose your settings like cadence and reading level.
         </p>
       </div>
       <div className="flex flex-col gap-2">
@@ -51,8 +58,7 @@ export default function Hero() {
           👉🏾 Step 3
         </p>
         <p className="text-md mx-auto max-w-md">
-          Hit submit, and we’ll transform your content into bite-sized,
-          digestible text messages tailored to your schedule.
+          Hit submit.
         </p>
       </div>
       <div className="flex flex-col gap-2">
@@ -60,8 +66,7 @@ export default function Hero() {
           👉🏾 Step 4
         </p>
         <p className="text-md mx-auto max-w-md">
-          Stay informed and retain knowledge with easy-to-read, perfectly timed
-          messages sent straight to your phone.
+          Learn and repeat.
         </p>
       </div>
       <br />

@@ -271,7 +271,7 @@ const splitIntoChunks = traceable(async (text: string, readingLevel: string): Pr
         ],
         temperature: 0.7,
         max_tokens: 2000,
-        response_format: zodResponseFormat(TextMessages, "messages"),
+        response_format: zodResponseFormat(TextMessages, "json"),
       });
 
       const response = completion.choices[0].message.parsed;
@@ -349,7 +349,7 @@ const getTitle = async (chunks: string[]): Promise<string> => {
     ],
     temperature: 0.7,
     max_tokens: 2000,
-    response_format: zodResponseFormat(Title, "title"),
+    response_format: zodResponseFormat(Title, "json"),
   });
   const response = completion.choices[0].message.parsed;
   const result = response?.title || "";
