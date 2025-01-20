@@ -42,7 +42,7 @@ export default function Hero() {
           👉🏾 Step 1
         </p>
         <p className="text-md mx-auto max-w-md">
-          Upload your content.
+        Share what you want to learn! Upload PDFs, text, youtube videos, or URLs.
         </p>
       </div>
       <div className="flex flex-col gap-2">
@@ -50,7 +50,7 @@ export default function Hero() {
           👉🏾 Step 2
         </p>
         <p className="text-md mx-auto max-w-md">
-        Choose your settings like cadence and reading level.
+        Choose how often you’d like to receive text messages and decide if you'd like the information to repeat for better retention.
         </p>
       </div>
       <div className="flex flex-col gap-2">
@@ -58,7 +58,7 @@ export default function Hero() {
           👉🏾 Step 3
         </p>
         <p className="text-md mx-auto max-w-md">
-          Hit submit.
+        Hit submit, and we’ll transform your content into bite-sized, digestible text messages tailored to your schedule.
         </p>
       </div>
       <div className="flex flex-col gap-2">
@@ -66,7 +66,7 @@ export default function Hero() {
           👉🏾 Step 4
         </p>
         <p className="text-md mx-auto max-w-md">
-          Learn and repeat.
+        Stay informed and retain knowledge with easy-to-read, perfectly timed messages sent straight to your phone.
         </p>
       </div>
       <br />
