@@ -23,10 +23,6 @@ const openai = wrapOpenAI(
 
 const MAX_FREE_SUBMISSIONS = 5;
 
-const TextMessages = z.object({
-  text_messages: z.array(z.string()),
-});
-
 type CadenceMap = {
   [key: string]: number;
 };
@@ -121,114 +117,6 @@ const cleanText = (text: string): string => {
     .replace(/\s{2,}/g, " ") // Replace multiple spaces with single space
     .trim();
 };
-const splitIntoChunks = traceable(async (text: string): Promise<string[]> => {
-  const gptModel = text.length > 120_000 ? "gpt-4o-mini" : "gpt-4o";
-  console.log(`Using model: ${gptModel} to split text into chunks`);
-
-  const systemPrompt = `You are an expert at breaking down and explaining complex information. Break down the content given by a user seeking to understand the content into engaing text messages that will be delivered back to the user in timely intervals. Some rules to follow are:
-      1. Each text message must be around 4-5 sentences under 1000 characters total.
-      2. Make each text message focus on a single concept, topic, idea, or quote from the content.
-      3. Write in a text message style while keeping the information accurate.
-      4. Ensure each text message is self-contained and easily understood.
-      5. Use simple language and explanatory analogies where helpful.
-      6. Exclude any unnecessary information that may be present in the content. This includes information about the author, references, any small talk, introductory content etc. that doesn't have meaningful informational value to the reader.
-      7. Make the information memorable and easy to understand.
-      8. If the body of text is instructional, break it into clear, actionable steps.
-      9. Ignore any content related to appendix or index. Only generate messages on the main content of the material.
-      10. DO NOT EXCEED more than 5 messages in total.
-    
-    Output format should be a series of text messages. Do not include a message that only introduces the topic, remember each text message should have some informational value.
-  
-    Informational value can be determined based on the content. If its a blogpost or interview, capture the main essence, teachings and quotes. If its an academic paper, capture the main technique and results. If its a news article, capture the main events. and so on.
-    
-    For example, if given a technical article about photosynthesis, good text messages would be:
-     - "🌱 Here's something cool: plants are basically solar-powered! They take sunlight and turn it into food using their leaves. The green color you see is from chlorophyll, which is like tiny solar panels inside the leaves."
-     - "💧 Water plays a huge role in photosynthesis! Plants drink it up from their roots and combine it with CO2 from the air. This chemical reaction helps create glucose - basically plant food!"
-    `;
-
-  try {
-    // Split text into smaller segments if it's too long
-    const maxCharsPerRequest = 20000; // Safe limit for context window
-    const textSegments = [];
-    for (let i = 0; i < text.length; i += maxCharsPerRequest) {
-      textSegments.push(text.slice(i, i + maxCharsPerRequest));
-    }
-
-    let allChunks: string[] = [];
-
-    // Process each segment
-    for (const segment of textSegments) {
-      const completion = await openai.beta.chat.completions.parse({
-        model: gptModel,
-        messages: [
-          {
-            role: "system",
-            content: systemPrompt,
-          },
-          {
-            role: "user",
-            content: `${segment}`,
-          },
-        ],
-        temperature: 0.7,
-        max_tokens: 2000,
-        response_format: zodResponseFormat(TextMessages, "messages"),
-      });
-
-      const response = completion.choices[0].message.parsed;
-
-      if (!response) {
-        console.warn("No response from GPT for segment");
-        continue;
-      }
-
-      // Split response into chunks and add to collection
-      const newChunks = response.text_messages
-        .map((chunk) => chunk.trim())
-        .filter((chunk) => chunk.length > 0);
-      allChunks = [...allChunks, ...newChunks];
-    }
-
-    // Validate chunks
-    allChunks = allChunks.filter((chunk) => {
-      // Ensure each chunk is within size limits and has actual content
-      return (
-        chunk.length > 0 &&
-        chunk.length <= 1000 && // Match database constraint
-        chunk.split(/[.!?]+/).length >= 2 &&
-        !chunk.slice(0, 10).toLowerCase().includes("i'm sorry")
-      ); // At least 2 sentences
-    });
-
-    if (allChunks.length === 0) {
-      // Fallback to simple chunking if GPT fails
-      console.warn("GPT chunking failed, falling back to simple chunking");
-      return text
-        .split(/[.!?]+/)
-        .reduce((acc: string[], sentence: string, i: number) => {
-          if (i % 3 === 0) acc.push(sentence + ".");
-          else if (acc.length > 0) acc[acc.length - 1] += " " + sentence + ".";
-          return acc;
-        }, [])
-        .filter((chunk) => chunk.trim().length > 0);
-    }
-
-    console.log("All chunks:", allChunks);
-
-    return allChunks;
-  } catch (error) {
-    console.error("Error in GPT text chunking:", error);
-    // Fallback to simple chunking
-    return text
-      .split(/[.!?]+/)
-      .reduce((acc: string[], sentence: string, i: number) => {
-        if (i % 3 === 0) acc.push(sentence + ".");
-        else if (acc.length > 0) acc[acc.length - 1] += " " + sentence + ".";
-        return acc;
-      }, [])
-      .filter((chunk) => chunk.trim().length > 0);
-  }
-});
 
 function isValidYouTubeUrl(url: string): boolean {
   // Extract video ID from URL
@@ -243,14 +131,6 @@ function isValidYouTubeUrl(url: string): boolean {
   return true;
 }
 
-function getTranscriptText(transcript: any[]) {
-  return transcript
-    .map((entry) => entry.text)
-    .join(" ")
-    .replace(/&amp;#39;/g, "'")
-    .replace(/\n/g, " ")
-    .trim();
-}
 
 async function isPublicUrl(url: string) {
   try {
@@ -385,187 +265,6 @@ export async function getUser() {
   }
 }
 
-export async function handleSaveChunks(
-  allChunkPromises: Promise<string[]>[],
-  submission_id: string,
-  cadence: string,
-  repeat: string,
-  userData: any,
-  supabase: SupabaseClient<any, "public", any>,
-  user: any,
-  files: File[],
-  url?: string,
-  youtube_url?: string,
-  raw_text?: string
-) {
-  const startTime = Date.now();
-  let stepStartTime = startTime;
-
-  try {
-    // Process chunks
-    console.log("Starting chunk processing...");
-    let allChunks: string[] = [];
-    for (const chunkPromise of allChunkPromises) {
-      const chunk = await chunkPromise;
-      allChunks = [...allChunks, ...chunk];
-    }
-    console.log(
-      `Chunk processing completed in ${Date.now() - stepStartTime}ms`
-    );
-
-    if (allChunks.length === 0) {
-      throw new Error("No content was extracted from the provided source");
-    }
-
-    // Generate start time
-    stepStartTime = Date.now();
-    console.log("Generating start time...");
-    const startDateTime = generateStartTime(
-      submission_id,
-      userData.timezone,
-      cadence
-    );
-    console.log(
-      `Start time generation completed in ${Date.now() - stepStartTime}ms`
-    );
-
-    // Create submission record
-    stepStartTime = Date.now();
-    console.log("Creating submission record...");
-    const { data: submission, error: submissionError } = await supabase
-      .from("submissions")
-      .insert({
-        submission_id: submission_id,
-        user_id: user.id,
-        text_field: youtube_url?.trim() || url?.trim() || raw_text || null,
-        uploaded_files: files.map((file) => file.name),
-        cadence,
-        repeat,
-        start_time: startDateTime.toISOString(),
-        timezone: userData.timezone,
-        last_sent_time: null,
-      })
-      .select()
-      .single();
-
-    if (submissionError) throw submissionError;
-    console.log(
-      `Submission record creation completed in ${Date.now() - stepStartTime}ms`
-    );
-
-    // Create messages
-    stepStartTime = Date.now();
-    console.log("Creating messages...");
-    const messageIds: string[] = [];
-
-    for (const chunk of allChunks) {
-      const message_id = randomUUID();
-      messageIds.push(message_id);
-
-      const { error: messageError } = await supabase.from("messages").insert({
-        message_id: message_id,
-        submission_id: submission_id,
-        message_text: chunk,
-        timezone: userData.timezone,
-      });
-
-      if (messageError) throw messageError;
-    }
-    console.log(
-      `Message creation completed in ${Date.now() - stepStartTime}ms`
-    );
-
-    // Update next_message_to_send
-    stepStartTime = Date.now();
-    console.log("Updating message links...");
-    for (let i = 0; i < messageIds.length; i++) {
-      const { error: updateError } = await supabase
-        .from("messages")
-        .update({
-          next_message_to_send: messageIds[(i + 1) % messageIds.length],
-        })
-        .eq("message_id", messageIds[i]);
-
-      if (updateError) throw updateError;
-    }
-    console.log(
-      `Message link updates completed in ${Date.now() - stepStartTime}ms`
-    );
-
-    // Update submission
-    stepStartTime = Date.now();
-    console.log("Updating submission with first message...");
-    const { error: updateSubmissionError } = await supabase
-      .from("submissions")
-      .update({
-        message_to_send: messageIds[0],
-        first_message_id: messageIds[0],
-      })
-      .eq("submission_id", submission_id);
-
-    if (updateSubmissionError) throw updateSubmissionError;
-    console.log(
-      `Submission update completed in ${Date.now() - stepStartTime}ms`
-    );
-
-    // Process messages
-    stepStartTime = Date.now();
-    console.log("Processing messages...");
-    await processMessages(supabase, {
-      submissionId: submission_id,
-      skipTimeCheck: true,
-      isFirstMessage: true,
-    });
-    console.log(
-      `Message processing completed in ${Date.now() - stepStartTime}ms`
-    );
-
-    const totalDuration = Date.now() - startTime;
-    console.log(`Total function execution completed in ${totalDuration}ms`);
-
-    return {
-      success: true,
-      submission_id: submission_id,
-      chunks_count: allChunks.length,
-      duration_ms: totalDuration,
-    };
-  } catch (error) {
-    const errorTime = Date.now();
-    console.error(`Error occurred after ${errorTime - startTime}ms:`, error);
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) throw new Error("Not authenticated");
-
-    // Get the user's name and phone number from Supabase or somewhere in your user profile.
-    // For example, maybe you have these columns:
-    const { data: userProfile } = await supabase
-      .from("users")
-      .select("*")
-      .eq("id", user.id)
-      .single();
-
-    const userName = userProfile?.first_name || "there";
-    const userPhone = `+${userProfile?.area_code}${userProfile?.phone_number}`;
-
-    // If userPhone is defined, send them a text explaining what happened
-    if (userPhone) {
-      const errorMsg =
-        typeof error === "object" && error !== null
-          ? (error as Error).message
-          : String(error);
-
-      await sendTextMessage(
-        userPhone,
-        `Hey ${userName}, there was an issue with your recent submission on Cadence.`
-      );
-    }
-
-    throw error;
-  }
-}
-
 export async function handleSubmission(formData: FormData): Promise<{ success: boolean, error?: string, submission_id?: string }> {
   const supabase = await createClient();
   const submission_id = formData.get("submission_id") as string | undefined;
@@ -575,6 +274,7 @@ export async function handleSubmission(formData: FormData): Promise<{ success: b
   const file_names = JSON.parse(formData.get("files") as string) as string[];
   const cadence = formData.get("cadence") as string;
   const repeat = formData.get("repeat") as string;
+  const reading_level = formData.get("reading_level") as string;
 
   try {
     const {
@@ -599,6 +299,9 @@ export async function handleSubmission(formData: FormData): Promise<{ success: b
     // if url, try scraping it to throw error if it fails
     if (url?.trim()) {
       try {
+        if (!isPublicUrl(url)) {
+          return { success: false, error: "The provided URL is not public. Please try copy-pasting the content text instead." };
+        }
         await scrapeUrl(url);
       } catch (error: any) {
         return { success: false, error: "There was an issue processing the URL. Please try copy-pasting the content text instead." };
@@ -628,6 +331,7 @@ export async function handleSubmission(formData: FormData): Promise<{ success: b
         message_to_send: null,
         first_message_id: null,
         start_time: getCurrentTime(userData.timezone),
+        reading_level,
       });
 
     if (submissionError) throw submissionError;

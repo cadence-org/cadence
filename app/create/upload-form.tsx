@@ -64,6 +64,7 @@ const FormSchema = z
       ),
     cadence: z.string(),
     repeat: z.string(),
+    reading_level: z.string(),
   })
   .refine(
     (data) => {
@@ -153,6 +154,7 @@ export default function UploadForm({
       files: [],
       cadence: "receive-daily",
       repeat: "do-not-repeat",
+      reading_level: "balanced",
     },
   });
 
@@ -213,7 +215,7 @@ export default function UploadForm({
       // Additional fields
       formData.append("cadence", data.cadence);
       formData.append("repeat", data.repeat);
-
+      formData.append("reading_level", data.reading_level);
       const result = await handleSubmission(formData);
 
       if (result.success) {
@@ -251,7 +253,7 @@ export default function UploadForm({
       </div>
       <div className="w-full flex flex-row justify-around">
         <p className="text-center">
-          Upload your content and we will deliver them to you in byte sized
+          Upload your content and we will deliver them to you in bite-sized
           texts at an interval of your choice.
         </p>
       </div>
@@ -430,7 +432,7 @@ export default function UploadForm({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
-                        <SelectLabel>Cadence</SelectLabel>
+                        <SelectLabel>Once every...</SelectLabel>
                         <SelectItem value="receive-daily">Day</SelectItem>
                         <SelectItem value="receive-12">
                           12 hours
@@ -457,8 +459,7 @@ export default function UploadForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>
-                  How often would you like the information in these texts to
-                  repeat?
+                Do you want these texts to be sent more than once?
                 </FormLabel>
                 <FormControl>
                   <Select onValueChange={field.onChange} value={field.value}>
@@ -467,14 +468,47 @@ export default function UploadForm({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
-                        <SelectLabel>Repeat</SelectLabel>
+                        <SelectLabel>Repeat?</SelectLabel>
                         <SelectItem
                           value="repeat-forever"
                           disabled={!isSubscribed}
                         >
-                          Forever {!isSubscribed && "(Pro ✨)"}
+                          Yes, repeat {!isSubscribed && "(Pro ✨)"}
                         </SelectItem>
-                        <SelectItem value="do-not-repeat">Never</SelectItem>
+                        <SelectItem value="do-not-repeat">No, send only once</SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* Repeat */}
+          <FormField
+            control={form.control}
+            name="reading_level"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>
+                How would you like the information in your texts to be presented?
+                </FormLabel>
+                <FormControl>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Reading Level..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectLabel>Reading Level</SelectLabel>
+                        <SelectItem
+                          value="simple"
+                        >
+                          Simple
+                        </SelectItem>
+                        <SelectItem value="balanced">Balanced</SelectItem>
+                        <SelectItem value="detailed">Detailed</SelectItem>
                       </SelectGroup>
                     </SelectContent>
                   </Select>
