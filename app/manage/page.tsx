@@ -28,11 +28,11 @@ export default async function Manage() {
               <ManageTile
                 key={submission.submission_id}
                 uuid={submission.submission_id}
-                textField={submission.text_field}
-                uploadedFiles={submission.uploaded_files}
+                textField={submission.text_field || ""}
+                uploadedFiles={submission.uploaded_files || []}
                 cadence={submission.cadence}
                 repeat={submission.repeat}
-                created={submission.created_at}
+                created={new Date(submission.created_at)}
               />
             ))}
           </div>

@@ -136,7 +136,7 @@ export async function processMessages(
             /\s+/g,
             ""
           );
-        await sendTextMessage(fullPhone, currentMessage.message_text);
+        await sendTextMessage(fullPhone, submission, currentMessage.message_text);
 
         // For first message, skip updating last_sent_time but still update message_to_send
         await updateAfterSend(

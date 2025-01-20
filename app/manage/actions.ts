@@ -2,15 +2,7 @@
 
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
-
-interface Submission {
-  submission_id: string;
-  text_field: string;
-  uploaded_files: string[];
-  cadence: string;
-  repeat: string;
-  created_at: Date;
-}
+import { Submission } from "@/utils/types";
 
 export async function handleGetSubmissions() {
   const supabase = await createClient();
@@ -29,14 +21,7 @@ export async function handleGetSubmissions() {
   }
 
   const resp = data.map((submission) => {
-    return {
-      submission_id: submission.submission_id,
-      text_field: submission.text_field,
-      uploaded_files: submission.uploaded_files,
-      cadence: submission.cadence,
-      repeat: submission.repeat,
-      created_at: new Date(submission.created_at),
-    } as Submission;
+    return submission as Submission;
   });
 
   return resp;

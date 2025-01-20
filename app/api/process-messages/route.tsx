@@ -12,6 +12,7 @@ import { Database } from "@/lib/database.types";
 import { zodResponseFormat } from "openai/helpers/zod";
 import { traceable } from "langsmith/traceable";
 import { wrapOpenAI } from "langsmith/wrappers";
+import { Submission } from "@/utils/types";
 
 // Type definitions
 type SubmissionResult = {
@@ -31,17 +32,6 @@ interface UserData {
   first_name: string | null;
   area_code: string;
   phone_number: string;
-}
-
-interface Submission {
-  submission_id: string;
-  user_id: string;
-  text_field: string | null;
-  uploaded_files: string[] | null;
-  timezone: string;
-  message_to_send: string | null;
-  first_message_id: string | null;
-  reading_level: string;
 }
 
 interface TranscriptResponse {
@@ -74,6 +64,10 @@ const readingLevelExamples: Record<string, string> = {
 const TextMessages = z.object({
   text_messages: z.array(z.string()),
 }) satisfies z.ZodType<{ text_messages: string[] }>;
+
+const Title = z.object({
+  title: z.string(),
+}) satisfies z.ZodType<{ title: string }>;
 
 const cleanText = (text: string): string => {
   return text
@@ -210,6 +204,7 @@ async function processUnprocessedSubmissions(
 
           await sendTextMessage(
             `+${userData.area_code}${userData.phone_number}`,
+            submission,
             errorMessage
           );
         }
@@ -276,7 +271,7 @@ const splitIntoChunks = traceable(async (text: string, readingLevel: string): Pr
         ],
         temperature: 0.7,
         max_tokens: 2000,
-        response_format: zodResponseFormat(TextMessages, "messages"),
+        response_format: zodResponseFormat(TextMessages, "json"),
       });
 
       const response = completion.choices[0].message.parsed;
@@ -333,6 +328,33 @@ const splitIntoChunks = traceable(async (text: string, readingLevel: string): Pr
       .filter((chunk) => chunk.trim().length > 0);
   }
 });
+
+const getTitle = async (chunks: string[]): Promise<string> => {
+  const systemPrompt = `Your job is to assign a title to the following content. Keep the title short and concise, not exceeding more than 5 words.`;
+  const gptModel = "gpt-4o-mini";
+  const shuffledChunks = [...chunks]
+    .sort(() => Math.random() - 0.5)
+    .slice(0, 5);
+  const completion = await openai.beta.chat.completions.parse({
+    model: gptModel,
+    messages: [
+      {
+        role: "system",
+        content: systemPrompt,
+      },
+      {
+        role: "user",
+        content: shuffledChunks.join("\n"),
+      },
+    ],
+    temperature: 0.7,
+    max_tokens: 2000,
+    response_format: zodResponseFormat(Title, "json"),
+  });
+  const response = completion.choices[0].message.parsed;
+  const result = response?.title || "";
+  return result;
+};
 
 async function processSubmission(
   supabase: SupabaseClient<Database>,
@@ -432,12 +454,15 @@ async function processSubmission(
       .eq("message_id", messageIds[i]);
   }
 
-  // Update submission with first message
+  const title = await getTitle(allChunks);
+
+  // Update submission with first message and title
   await supabase
     .from("submissions")
     .update({
       message_to_send: messageIds[0],
       first_message_id: messageIds[0],
+      title,
     })
     .eq("submission_id", submission.submission_id);
 
