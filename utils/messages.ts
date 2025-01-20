@@ -104,7 +104,7 @@ export async function processMessages(
         // Skip time check if this is an immediate send
         if (
           !options.skipTimeCheck &&
-          !shouldSendMessage(submission, currentTime)
+          !shouldSendMessage(submission, currentTime, submission.users.timezone)
         ) {
           console.log(
             "skipping submission with id: ",

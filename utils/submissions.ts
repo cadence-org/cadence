@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { Submission } from "@/utils/types";
+import { toZonedTime } from 'date-fns-tz';
 
 type CadenceMap = {
   [key: string]: number;
@@ -53,7 +54,8 @@ export async function getCurrentMessage(
 
 export function shouldSendMessage(
   submission: Submission,
-  currentTime: Date
+  currentTime: Date,
+  timezeone: string,
 ): boolean {
   const startTime = new Date(submission.start_time);
   const lastSentTime = submission.last_sent_time
@@ -73,6 +75,12 @@ export function shouldSendMessage(
   // If never sent before, check if start time has passed
   if (!lastSentTime) {
     return currentTime >= startTime;
+  }
+
+  // check if user's time is in waking hours
+  const userTime = toZonedTime(currentTime, timezeone);
+  if (userTime.getHours() < 8 || userTime.getHours() > 22) {
+    return false;
   }
 
   // Check if enough time has passed since last send
