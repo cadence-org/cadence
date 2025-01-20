@@ -400,7 +400,7 @@ async function processSubmission(
       cleanedText = cleanText(submission.text_field);
     }
 
-    const chunks = await splitIntoChunks(cleanedText);
+    const chunks = await splitIntoChunks(cleanedText, submission.reading_level);
     allChunks = [...allChunks, ...chunks];
   }
 
