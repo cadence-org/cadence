@@ -290,11 +290,9 @@ const splitIntoChunks = traceable(
         textSegments.push(text.slice(i, i + maxCharsPerRequest));
       }
 
-      let allChunks: string[] = [];
-
-      // Process each segment
-      for (const segment of textSegments) {
-        const completion = await openai.beta.chat.completions.parse({
+      // Process all segments in parallel
+      const segmentPromises = textSegments.map((segment) =>
+        openai.beta.chat.completions.parse({
           model: gptModel,
           messages: [
             {
@@ -309,31 +307,35 @@ const splitIntoChunks = traceable(
           temperature: 0.7,
           max_tokens: 2000,
           response_format: zodResponseFormat(TextMessages, "json"),
-        });
+        })
+      );
 
-        const response = completion.choices[0].message.parsed;
+      // Wait for all GPT calls to complete
+      const completions = await Promise.all(segmentPromises);
 
-        if (!response) {
-          console.warn("No response from GPT for segment");
-          continue;
-        }
+      // Process all responses and collect chunks
+      let allChunks = completions
+        .map((completion) => completion.choices[0].message.parsed)
+        .filter((response): response is NonNullable<typeof response> => {
+          if (!response) {
+            console.warn("No response from GPT for segment");
+            return false;
+          }
+          return true;
+        })
+        .flatMap((response) =>
+          response.text_messages
+            .map((chunk) => chunk.trim())
+            .filter((chunk) => chunk.length > 0)
+        );
 
-        // Split response into chunks and add to collection
-        const newChunks = response.text_messages
-          .map((chunk) => chunk.trim())
-          .filter((chunk) => chunk.length > 0);
-        allChunks = [...allChunks, ...newChunks];
-      }
-
-      // Validate chunks
       allChunks = allChunks.filter((chunk) => {
-        // Ensure each chunk is within size limits and has actual content
         return (
           chunk.length > 0 &&
           chunk.length <= 1000 && // Match database constraint
           chunk.split(/[.!?]+/).length >= 2 &&
           !chunk.slice(0, 10).toLowerCase().includes("i'm sorry")
-        ); // At least 2 sentences
+        );
       });
 
       if (allChunks.length === 0) {
@@ -401,28 +403,36 @@ async function processSubmission(
 ): Promise<{ success: true }> {
   let allChunks: string[] = [];
 
-  // Process files if any
+  // Process files if any in parallel
   const files = submission.uploaded_files || [];
   if (files.length > 0) {
-    for (const filename of files) {
+    const fileProcessingPromises = files.map(async (filename) => {
       const filePath = `${submission.user_id}/${submission.submission_id}/${filename}`;
 
       const { data: signedUrlData } = await supabase.storage
         .from("attachments")
         .createSignedUrl(filePath, 60 * 60);
 
-      if (!signedUrlData?.signedUrl) continue;
+      if (!signedUrlData?.signedUrl) return [];
 
-      const fileResponse = await fetch(signedUrlData.signedUrl);
-      const fileBuffer = Buffer.from(await fileResponse.arrayBuffer());
-      const pdfData = await pdfParse(fileBuffer);
+      // Parallelize file fetching and processing
+      const [fileResponse, pdfData] = await Promise.all([
+        fetch(signedUrlData.signedUrl),
+        (async () => {
+          const fileBuffer = Buffer.from(
+            await (await fetch(signedUrlData.signedUrl)).arrayBuffer()
+          );
+          return pdfParse(fileBuffer);
+        })(),
+      ]);
+
       const cleanedText = cleanText(pdfData.text);
-      const chunks = await splitIntoChunks(
-        cleanedText,
-        submission.reading_level
-      );
-      allChunks = [...allChunks, ...chunks];
-    }
+      return splitIntoChunks(cleanedText, submission.reading_level);
+    });
+
+    // Wait for all files to be processed and flatten the results
+    const fileChunks = await Promise.all(fileProcessingPromises);
+    allChunks = fileChunks.flat();
   }
 
   // Process text content if any
@@ -457,7 +467,6 @@ async function processSubmission(
           formats: ["markdown"],
         });
 
-        // Access the markdown content from the response
         if (scrapeResult.success) {
           cleanedText = cleanMarkdown(scrapeResult?.markdown ?? null);
         } else {
@@ -473,39 +482,49 @@ async function processSubmission(
       cleanedText = cleanText(submission.text_field);
     }
 
-    const chunks = await splitIntoChunks(cleanedText, submission.reading_level);
-    allChunks = [...allChunks, ...chunks];
+    const textChunks = await splitIntoChunks(
+      cleanedText,
+      submission.reading_level
+    );
+    allChunks = [...allChunks, ...textChunks];
   }
 
   if (allChunks.length === 0) {
     throw new Error("No content was extracted from the provided source");
   }
 
-  // Create messages
-  const messageIds: string[] = [];
-  for (const chunk of allChunks) {
-    const message_id = randomUUID();
-    messageIds.push(message_id);
+  // Generate message IDs upfront
+  const messageIds = allChunks.map(() => randomUUID());
 
-    await supabase.from("messages").insert({
-      message_id,
+  // Start title generation in parallel with message creation
+  const titlePromise = getTitle(allChunks);
+
+  // Create messages in parallel
+  const messageInsertPromises = allChunks.map((chunk, index) =>
+    supabase.from("messages").insert({
+      message_id: messageIds[index],
       submission_id: submission.submission_id,
       message_text: chunk,
       timezone: submission.timezone,
-    });
-  }
+    })
+  );
 
-  // Link messages together
-  for (let i = 0; i < messageIds.length; i++) {
-    await supabase
+  // Link messages in parallel
+  const messageLinkPromises = messageIds.map((messageId, index) =>
+    supabase
       .from("messages")
       .update({
-        next_message_to_send: messageIds[(i + 1) % messageIds.length],
+        next_message_to_send: messageIds[(index + 1) % messageIds.length],
       })
-      .eq("message_id", messageIds[i]);
-  }
+      .eq("message_id", messageId)
+  );
 
-  const title = await getTitle(allChunks);
+  // Wait for all operations to complete
+  const [title] = await Promise.all([
+    titlePromise,
+    ...messageInsertPromises,
+    ...messageLinkPromises,
+  ]);
 
   // Update submission with first message and title
   await supabase

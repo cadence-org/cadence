@@ -29,7 +29,6 @@ export async function processMessages(
 ): Promise<ProcessMessageResult> {
   try {
     const currentTime = new Date();
-    const results: MessageResult[] = [];
 
     // Get submissions to process
     let submissions;
@@ -49,9 +48,8 @@ export async function processMessages(
             `
         )
         .eq("submission_id", options.submissionId)
-        // Safety checks for fully processed submissions
-        .not("message_to_send", "is", null) // Must have a message to send
-        .not("first_message_id", "is", null) // Must have first message set
+        .not("message_to_send", "is", null)
+        .not("first_message_id", "is", null)
         .single();
 
       if (error) {
@@ -80,9 +78,8 @@ export async function processMessages(
               )
             `
         )
-        // Safety checks for fully processed submissions
-        .not("message_to_send", "is", null) // Must have a message to send
-        .not("first_message_id", "is", null); // Must have first message set
+        .not("message_to_send", "is", null)
+        .not("first_message_id", "is", null);
 
       if (error) throw error;
       submissions = data || [];
@@ -93,76 +90,79 @@ export async function processMessages(
       submissions.map((s) => s?.submission_id)
     );
 
-    // Process each submission
-    for (const submission of submissions) {
-      if (!submission) {
-        console.warn("Skipping null submission");
-        continue;
-      }
+    // Process all submissions in parallel
+    const results = await Promise.all(
+      submissions
+        .filter(
+          (submission): submission is NonNullable<typeof submission> =>
+            Boolean(submission) &&
+            (options.skipTimeCheck ||
+              shouldSendMessage(
+                submission,
+                currentTime,
+                submission.users.timezone
+              ))
+        )
+        .map(async (submission): Promise<MessageResult> => {
+          try {
+            // Double-check current message exists (extra safety)
+            const currentMessage = await getCurrentMessage(
+              supabase,
+              submission.message_to_send
+            );
 
-      try {
-        // Skip time check if this is an immediate send
-        if (
-          !options.skipTimeCheck &&
-          !shouldSendMessage(submission, currentTime, submission.users.timezone)
-        ) {
-          console.log(
-            "skipping submission with id: ",
-            submission.submission_id
-          );
-          continue;
-        }
+            if (!currentMessage) {
+              throw new Error(
+                `Message not found: ${submission.message_to_send}`
+              );
+            }
 
-        // Double-check current message exists (extra safety)
-        const currentMessage = await getCurrentMessage(
-          supabase,
-          submission.message_to_send
-        );
+            // Verify message belongs to this submission (extra safety)
+            if (currentMessage.submission_id !== submission.submission_id) {
+              throw new Error(
+                `Message ${submission.message_to_send} does not belong to submission ${submission.submission_id}`
+              );
+            }
 
-        if (!currentMessage) {
-          throw new Error(`Message not found: ${submission.message_to_send}`);
-        }
+            // Send the message and update in parallel
+            const fullPhone =
+              `+${submission.users.area_code}${submission.users.phone_number}`.replace(
+                /\s+/g,
+                ""
+              );
 
-        // Verify message belongs to this submission (extra safety)
-        if (currentMessage.submission_id !== submission.submission_id) {
-          throw new Error(
-            `Message ${submission.message_to_send} does not belong to submission ${submission.submission_id}`
-          );
-        }
+            await Promise.all([
+              sendTextMessage(
+                fullPhone,
+                submission,
+                currentMessage.message_text
+              ),
+              updateAfterSend(
+                supabase,
+                submission,
+                currentMessage,
+                currentTime,
+                options.isFirstMessage
+              ),
+            ]);
 
-        // Send the message
-        const fullPhone =
-          `+${submission.users.area_code}${submission.users.phone_number}`.replace(
-            /\s+/g,
-            ""
-          );
-        await sendTextMessage(fullPhone, submission, currentMessage.message_text);
-
-        // For first message, skip updating last_sent_time but still update message_to_send
-        await updateAfterSend(
-          supabase,
-          submission,
-          currentMessage,
-          currentTime,
-          options.isFirstMessage
-        );
-
-        results.push({
-          submission_id: submission.submission_id,
-          status: "success" as const,
-        });
-      } catch (error) {
-        console.error(
-          `Error processing submission ${submission?.submission_id}:`,
-          error
-        );
-        results.push({
-          submission_id: submission.submission_id,
-          status: "error" as const,
-          error: error instanceof Error ? error.message : "Unknown error",
-        });
-      }
-    }
+            return {
+              submission_id: submission.submission_id,
+              status: "success" as const,
+            };
+          } catch (error) {
+            console.error(
+              `Error processing submission ${submission?.submission_id}:`,
+              error
+            );
+            return {
+              submission_id: submission.submission_id,
+              status: "error" as const,
+              error: error instanceof Error ? error.message : "Unknown error",
+            };
+          }
+        })
+    );
 
     return {
       success: true,
