@@ -14,6 +14,7 @@ import { traceable } from "langsmith/traceable";
 import { wrapOpenAI } from "langsmith/wrappers";
 import { Submission } from "@/utils/types";
 import FireCrawlApp from "@mendable/firecrawl-js";
+import { processMessages } from "@/utils/messages";
 
 const firecrawl = new FireCrawlApp({
   apiKey: process.env.FIRECRAWL_API_KEY,
@@ -132,14 +133,36 @@ export async function GET(request: NextRequest): Promise<Response> {
   console.log("Starting job at:", new Date(startTime).toISOString());
 
   const supabase = createServiceClient();
-  const result = await processUnprocessedSubmissions(supabase);
+  const processResult = await processUnprocessedSubmissions(supabase);
+
+  if (
+    processResult.success &&
+    processResult.processed &&
+    processResult.processed.length > 0
+  ) {
+    // Get IDs of successfully processed submissions
+    const successfulIds = processResult.processed
+      .filter((result) => result.status === "success")
+      .map((result) => result.id);
+
+    // Process all first messages in parallel
+    await Promise.all(
+      successfulIds.map((id) =>
+        processMessages(supabase, {
+          submissionId: id,
+          skipTimeCheck: true,
+          isFirstMessage: true,
+        })
+      )
+    );
+  }
 
   const endTime = Date.now();
   const duration = (endTime - startTime) / 1000; // in seconds
   console.log("Job completed in:", duration, "seconds");
 
-  return Response.json(result, {
-    status: result.success ? 200 : 500,
+  return Response.json(processResult, {
+    status: processResult.success ? 200 : 500,
   });
 }
 

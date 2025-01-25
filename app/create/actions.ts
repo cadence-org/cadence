@@ -1,18 +1,8 @@
 "use server";
 
-import * as cheerio from "cheerio";
-import pdfParse from "pdf-parse";
 import { createClient } from "@/utils/supabase/server";
-import OpenAI from "openai";
 import { SupabaseClient } from "@supabase/supabase-js";
 import crypto from "crypto";
-import { wrapOpenAI } from "langsmith/wrappers";
-
-const openai = wrapOpenAI(
-  new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  })
-);
 
 const MAX_FREE_SUBMISSIONS = 5;
 
@@ -94,23 +84,6 @@ function getCurrentTime(timezone: string): Date {
   return new Date(userNow);
 }
 
-const cleanText = (text: string): string => {
-  return text
-    .replace(/\s+/g, " ") // Replace multiple spaces with single space
-    .replace(/\\n+/g, "\\n") // Replace multiple newlines with single newline
-    .replace(/\[\s*\]/g, "") // Remove empty brackets
-    .replace(/\(\s*\)/g, "") // Remove empty parentheses
-    .replace(/\s+([.,!?])/g, "$1") // Remove spaces before punctuation
-    .replace(/\s+$/gm, "") // Remove trailing spaces
-    .replace(/^\s+/gm, "") // Remove leading spaces
-    .replace(/\b(Reply|Comment)\b/g, "") // Remove common blog artifacts
-    .replace(/Loading\.\.\./g, "")
-    .replace(/<[^>]*>/g, "") // Remove any remaining HTML tags
-    .replace(/&[a-z]+;/gi, "") // Remove HTML entities
-    .replace(/\s{2,}/g, " ") // Replace multiple spaces with single space
-    .trim();
-};
-
 function isValidYouTubeUrl(url: string): boolean {
   // Extract video ID from URL
   const videoId = url.match(
@@ -139,63 +112,6 @@ async function isPublicUrl(url: string) {
     console.error("Public URL check failed:", error);
     return false;
   }
-}
-
-export async function scrapeUrl(url: string) {
-  const response = await fetch(url);
-  const html = await response.text();
-  const $ = cheerio.load(html);
-
-  // Remove unwanted elements
-  $("script").remove();
-  $("style").remove();
-  $("comment").remove();
-  $("iframe").remove();
-  $("nav").remove();
-  $("header").remove();
-  $("footer").remove();
-  $(".comments").remove();
-  $("#comments").remove();
-  $("img").remove();
-  $('[class*="advertisement"]').remove();
-  $('[id*="advertisement"]').remove();
-  $('[class*="sidebar"]').remove();
-  $('[id*="sidebar"]').remove();
-  $('[class*="footer"]').remove();
-  $('[id*="footer"]').remove();
-
-  // Some common selectors for articles
-  const contentSelectors = [
-    "article",
-    "main",
-    ".main-content",
-    "#main-content",
-    ".post-content",
-    ".article-content",
-    ".entry-content",
-    ".content",
-    '[role="main"]',
-    "#content",
-    "#mw-content-text",
-  ];
-
-  let mainContent = "";
-  for (const selector of contentSelectors) {
-    const content = $(selector).text();
-    if (content) {
-      mainContent += "\n" + content;
-    }
-  }
-
-  // If no main content found, throw an error and ask user to copy-paste the text instead
-  if (!mainContent) {
-    throw new Error(
-      "Sorry, we were unable to find the content in the provided URL. Please try copy-pasting the content text instead."
-    );
-  }
-
-  const cleanedText = cleanText(mainContent);
-  return cleanedText;
 }
 
 async function checkUserCanSubmit(
@@ -230,22 +146,6 @@ async function checkUserCanSubmit(
   return true;
 }
 
-export async function parsePdf(file: Buffer) {
-  try {
-    const data = await pdfParse(file, {
-      // Remove custom pagerender function to use default text extraction
-      max: 0, // No limit on pages
-    });
-
-    const cleanedText = cleanText(data.text);
-
-    return cleanedText;
-  } catch (error) {
-    console.error("Error parsing PDF:", error);
-    throw new Error("Failed to parse PDF");
-  }
-}
-
 export async function getUser() {
   try {
     const supabase = await createClient();
@@ -261,7 +161,7 @@ export async function handleSubmission(
   formData: FormData
 ): Promise<{ success: boolean; error?: string; submission_id?: string }> {
   const supabase = await createClient();
-  const submission_id = formData.get("submission_id") as string | undefined;
+  const submission_id = formData.get("submission_id") as string;
   const url = formData.get("url") as string | undefined;
   const youtube_url = formData.get("youtube_url") as string | undefined;
   const raw_text = formData.get("raw_text") as string | undefined;
@@ -324,6 +224,12 @@ export async function handleSubmission(
       }
     }
 
+    const startTime = generateStartTime(
+      submission_id,
+      userData.timezone,
+      cadence
+    );
+
     // Create initial submission record
     // Note: message_to_send is null by default, which indicates it needs processing
     const { error: submissionError } = await supabase
@@ -338,7 +244,7 @@ export async function handleSubmission(
         timezone: userData.timezone,
         message_to_send: null,
         first_message_id: null,
-        start_time: getCurrentTime(userData.timezone),
+        start_time: startTime.toISOString(),
         reading_level,
       });
 
