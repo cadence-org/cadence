@@ -13,6 +13,11 @@ import { zodResponseFormat } from "openai/helpers/zod";
 import { traceable } from "langsmith/traceable";
 import { wrapOpenAI } from "langsmith/wrappers";
 import { Submission } from "@/utils/types";
+import FireCrawlApp from "@mendable/firecrawl-js";
+
+const firecrawl = new FireCrawlApp({
+  apiKey: process.env.FIRECRAWL_API_KEY,
+});
 
 // Type definitions
 type SubmissionResult = {
@@ -84,6 +89,37 @@ const cleanText = (text: string): string => {
     .replace(/&[a-z]+;/gi, "")
     .replace(/\s{2,}/g, " ")
     .trim();
+};
+
+const cleanMarkdown = (markdown: string | null): string => {
+  if (!markdown) {
+    throw new Error("Markdown response was null");
+  }
+  return (
+    markdown
+      // Remove images
+      .replace(/!\[.*?\]\(.*?\)/g, "")
+      // Remove links but keep text
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
+      // Remove headers
+      .replace(/#{1,6}\s+/g, "")
+      // Remove HTML comments
+      .replace(/<!--[\s\S]*?-->/g, "")
+      // Remove HTML tags
+      .replace(/<[^>]*>/g, "")
+      // Remove multiple newlines
+      .replace(/\n{3,}/g, "\n\n")
+      // Remove horizontal rules
+      .replace(/---/g, "")
+      // Clean extra whitespace
+      .replace(/\s+/g, " ")
+      // Remove URLs
+      .replace(/https?:\/\/[^\s]+/g, "")
+      // Clean up any markdown artifacts
+      .replace(/[*_`~]/g, "")
+      // Trim whitespace
+      .trim()
+  );
 };
 
 export async function GET(request: NextRequest): Promise<Response> {
@@ -221,11 +257,12 @@ async function processUnprocessedSubmissions(
   }
 }
 
-const splitIntoChunks = traceable(async (text: string, readingLevel: string): Promise<string[]> => {
-  const gptModel = text.length > 120_000 ? "gpt-4o-mini" : "gpt-4o";
-  console.log(`Using model: ${gptModel} to split text into chunks`);
+const splitIntoChunks = traceable(
+  async (text: string, readingLevel: string): Promise<string[]> => {
+    const gptModel = text.length > 120_000 ? "gpt-4o-mini" : "gpt-4o";
+    console.log(`Using model: ${gptModel} to split text into chunks`);
 
-  const systemPrompt = `You are an expert at breaking down and explaining complex information. Break down the content given by a user seeking to understand the content into engaing text messages that will be delivered back to the user in timely intervals. Some rules to follow are:
+    const systemPrompt = `You are an expert at breaking down and explaining complex information. Break down the content given by a user seeking to understand the content into engaing text messages that will be delivered back to the user in timely intervals. Some rules to follow are:
       1. Each text message must be around 4-5 sentences under 1000 characters total.
       2. Make each text message focus on a single concept, topic, idea, or quote from the content.
       3. Write in a text message style while keeping the information accurate.
@@ -245,63 +282,80 @@ const splitIntoChunks = traceable(async (text: string, readingLevel: string): Pr
     ${readingLevelExamples[readingLevel]}
     `;
 
-  try {
-    // Split text into smaller segments if it's too long
-    const maxCharsPerRequest = 20000; // Safe limit for context window
-    const textSegments = [];
-    for (let i = 0; i < text.length; i += maxCharsPerRequest) {
-      textSegments.push(text.slice(i, i + maxCharsPerRequest));
-    }
-
-    let allChunks: string[] = [];
-
-    // Process each segment
-    for (const segment of textSegments) {
-      const completion = await openai.beta.chat.completions.parse({
-        model: gptModel,
-        messages: [
-          {
-            role: "system",
-            content: systemPrompt,
-          },
-          {
-            role: "user",
-            content: `${segment}`,
-          },
-        ],
-        temperature: 0.7,
-        max_tokens: 2000,
-        response_format: zodResponseFormat(TextMessages, "json"),
-      });
-
-      const response = completion.choices[0].message.parsed;
-
-      if (!response) {
-        console.warn("No response from GPT for segment");
-        continue;
+    try {
+      // Split text into smaller segments if it's too long
+      const maxCharsPerRequest = 20000; // Safe limit for context window
+      const textSegments = [];
+      for (let i = 0; i < text.length; i += maxCharsPerRequest) {
+        textSegments.push(text.slice(i, i + maxCharsPerRequest));
       }
 
-      // Split response into chunks and add to collection
-      const newChunks = response.text_messages
-        .map((chunk) => chunk.trim())
-        .filter((chunk) => chunk.length > 0);
-      allChunks = [...allChunks, ...newChunks];
-    }
+      let allChunks: string[] = [];
 
-    // Validate chunks
-    allChunks = allChunks.filter((chunk) => {
-      // Ensure each chunk is within size limits and has actual content
-      return (
-        chunk.length > 0 &&
-        chunk.length <= 1000 && // Match database constraint
-        chunk.split(/[.!?]+/).length >= 2 &&
-        !chunk.slice(0, 10).toLowerCase().includes("i'm sorry")
-      ); // At least 2 sentences
-    });
+      // Process each segment
+      for (const segment of textSegments) {
+        const completion = await openai.beta.chat.completions.parse({
+          model: gptModel,
+          messages: [
+            {
+              role: "system",
+              content: systemPrompt,
+            },
+            {
+              role: "user",
+              content: `${segment}`,
+            },
+          ],
+          temperature: 0.7,
+          max_tokens: 2000,
+          response_format: zodResponseFormat(TextMessages, "json"),
+        });
 
-    if (allChunks.length === 0) {
-      // Fallback to simple chunking if GPT fails
-      console.warn("GPT chunking failed, falling back to simple chunking");
+        const response = completion.choices[0].message.parsed;
+
+        if (!response) {
+          console.warn("No response from GPT for segment");
+          continue;
+        }
+
+        // Split response into chunks and add to collection
+        const newChunks = response.text_messages
+          .map((chunk) => chunk.trim())
+          .filter((chunk) => chunk.length > 0);
+        allChunks = [...allChunks, ...newChunks];
+      }
+
+      // Validate chunks
+      allChunks = allChunks.filter((chunk) => {
+        // Ensure each chunk is within size limits and has actual content
+        return (
+          chunk.length > 0 &&
+          chunk.length <= 1000 && // Match database constraint
+          chunk.split(/[.!?]+/).length >= 2 &&
+          !chunk.slice(0, 10).toLowerCase().includes("i'm sorry")
+        ); // At least 2 sentences
+      });
+
+      if (allChunks.length === 0) {
+        // Fallback to simple chunking if GPT fails
+        console.warn("GPT chunking failed, falling back to simple chunking");
+        return text
+          .split(/[.!?]+/)
+          .reduce((acc: string[], sentence: string, i: number) => {
+            if (i % 3 === 0) acc.push(sentence + ".");
+            else if (acc.length > 0)
+              acc[acc.length - 1] += " " + sentence + ".";
+            return acc;
+          }, [])
+          .filter((chunk) => chunk.trim().length > 0);
+      }
+
+      console.log("All chunks:", allChunks);
+
+      return allChunks;
+    } catch (error) {
+      console.error("Error in GPT text chunking:", error);
+      // Fallback to simple chunking
       return text
         .split(/[.!?]+/)
         .reduce((acc: string[], sentence: string, i: number) => {
@@ -311,23 +365,8 @@ const splitIntoChunks = traceable(async (text: string, readingLevel: string): Pr
         }, [])
         .filter((chunk) => chunk.trim().length > 0);
     }
-
-    console.log("All chunks:", allChunks);
-
-    return allChunks;
-  } catch (error) {
-    console.error("Error in GPT text chunking:", error);
-    // Fallback to simple chunking
-    return text
-      .split(/[.!?]+/)
-      .reduce((acc: string[], sentence: string, i: number) => {
-        if (i % 3 === 0) acc.push(sentence + ".");
-        else if (acc.length > 0) acc[acc.length - 1] += " " + sentence + ".";
-        return acc;
-      }, [])
-      .filter((chunk) => chunk.trim().length > 0);
   }
-});
+);
 
 const getTitle = async (chunks: string[]): Promise<string> => {
   const systemPrompt = `Your job is to assign a title to the following content. Keep the title short and concise, not exceeding more than 5 words.`;
@@ -378,7 +417,10 @@ async function processSubmission(
       const fileBuffer = Buffer.from(await fileResponse.arrayBuffer());
       const pdfData = await pdfParse(fileBuffer);
       const cleanedText = cleanText(pdfData.text);
-      const chunks = await splitIntoChunks(cleanedText, submission.reading_level);
+      const chunks = await splitIntoChunks(
+        cleanedText,
+        submission.reading_level
+      );
       allChunks = [...allChunks, ...chunks];
     }
   }
@@ -410,14 +452,23 @@ async function processSubmission(
       const data = (await transcriptResponse.json()) as TranscriptResponse;
       cleanedText = data.transcript;
     } else if (submission.text_field.startsWith("http")) {
-      const response = await fetch(submission.text_field);
-      const html = await response.text();
-      const $ = cheerio.load(html);
+      try {
+        const scrapeResult = await firecrawl.scrapeUrl(submission.text_field, {
+          formats: ["markdown"],
+        });
 
-      $(
-        "script, style, nav, header, footer, .comments, #comments, img"
-      ).remove();
-      cleanedText = cleanText($("body").text());
+        // Access the markdown content from the response
+        if (scrapeResult.success) {
+          cleanedText = cleanMarkdown(scrapeResult?.markdown ?? null);
+        } else {
+          throw new Error("Failed to extract content from URL");
+        }
+      } catch (error) {
+        console.error("FireCrawl scraping error:", error);
+        throw new Error(
+          `Failed to scrape URL content: ${error instanceof Error ? error.message : "Unknown error"}`
+        );
+      }
     } else {
       cleanedText = cleanText(submission.text_field);
     }
