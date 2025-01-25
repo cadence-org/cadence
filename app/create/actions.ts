@@ -124,7 +124,6 @@ function isValidYouTubeUrl(url: string): boolean {
   return true;
 }
 
-
 async function isPublicUrl(url: string) {
   try {
     // A HEAD request is often enough to see if it's public (2xx).
@@ -258,7 +257,9 @@ export async function getUser() {
   }
 }
 
-export async function handleSubmission(formData: FormData): Promise<{ success: boolean, error?: string, submission_id?: string }> {
+export async function handleSubmission(
+  formData: FormData
+): Promise<{ success: boolean; error?: string; submission_id?: string }> {
   const supabase = await createClient();
   const submission_id = formData.get("submission_id") as string | undefined;
   const url = formData.get("url") as string | undefined;
@@ -277,7 +278,11 @@ export async function handleSubmission(formData: FormData): Promise<{ success: b
 
     const canSubmit = await checkUserCanSubmit(supabase, user.id);
     if (!canSubmit) {
-      return { success: false, error: "You've hit the submission limit. Get Pro ✨ for unlimited submissions." };
+      return {
+        success: false,
+        error:
+          "You've hit the submission limit. Get Pro ✨ for unlimited submissions.",
+      };
     }
 
     // Get user's timezone
@@ -293,11 +298,18 @@ export async function handleSubmission(formData: FormData): Promise<{ success: b
     if (url?.trim()) {
       try {
         if (!isPublicUrl(url)) {
-          return { success: false, error: "The provided URL is not public. Please try copy-pasting the content text instead." };
+          return {
+            success: false,
+            error:
+              "The provided URL is not public. Please try copy-pasting the content text instead.",
+          };
         }
-        await scrapeUrl(url);
       } catch (error: any) {
-        return { success: false, error: "There was an issue processing the URL. Please try copy-pasting the content text instead." };
+        return {
+          success: false,
+          error:
+            "There was an issue processing the URL. Please try copy-pasting the content text instead.",
+        };
       }
     }
 
@@ -305,7 +317,10 @@ export async function handleSubmission(formData: FormData): Promise<{ success: b
     if (youtube_url?.trim()) {
       const isValid = isValidYouTubeUrl(youtube_url);
       if (!isValid) {
-        return { success: false, error: "Invalid YouTube URL. Make sure the pasted URL is correct." };
+        return {
+          success: false,
+          error: "Invalid YouTube URL. Make sure the pasted URL is correct.",
+        };
       }
     }
 
