@@ -141,8 +141,7 @@ export async function processMessages(
                 supabase,
                 submission,
                 currentMessage,
-                currentTime,
-                options.isFirstMessage
+                currentTime
               ),
             ]);
 
