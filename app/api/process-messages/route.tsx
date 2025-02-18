@@ -542,14 +542,16 @@ async function processSubmission(
       .eq("message_id", messageId)
   );
 
-  // Wait for all operations to complete
-  const [title] = await Promise.all([
-    titlePromise,
-    ...messageInsertPromises,
-    ...messageLinkPromises,
-  ]);
+  // 1. Insert messages first
+  await Promise.all(messageInsertPromises);
 
-  // Update submission with first message and title
+  // 2. Then update messages to link them
+  await Promise.all(messageLinkPromises);
+
+  // 3. Get the title from GPT
+  const title = await titlePromise;
+
+  // 4. Finally, update the submission with the first message ID and title
   await supabase
     .from("submissions")
     .update({
