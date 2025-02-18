@@ -1,12 +1,12 @@
 {
   "crons": [
     {
-      "path": "/api/send-messages",
-      "schedule": "*/10 * * * *"
-    },
-    {
       "path": "/api/process-messages",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/send-messages",
+      "schedule": "3-59/5 * * * *"
     }
   ],
   "regions": ["sfo1", "lhr1", "sin1"]

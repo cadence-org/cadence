@@ -1,7 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { Submission } from "@/utils/types";
-import { toZonedTime } from 'date-fns-tz';
+import { toZonedTime } from "date-fns-tz";
 
 type CadenceMap = {
   [key: string]: number;
@@ -55,7 +55,7 @@ export async function getCurrentMessage(
 export function shouldSendMessage(
   submission: Submission,
   currentTime: Date,
-  timezeone: string,
+  timezeone: string
 ): boolean {
   const startTime = new Date(submission.start_time);
   const lastSentTime = submission.last_sent_time
@@ -93,8 +93,7 @@ export async function updateAfterSend(
   supabase: SupabaseClient,
   submission: Submission,
   currentMessage: Message,
-  currentTime: Date,
-  skipLastSentUpdate: boolean = false
+  currentTime: Date
 ) {
   const updates = [
     // Update submission - always update message_to_send, conditionally update last_sent_time
@@ -102,9 +101,7 @@ export async function updateAfterSend(
       .from("submissions")
       .update({
         message_to_send: currentMessage.next_message_to_send,
-        ...(skipLastSentUpdate
-          ? {}
-          : { last_sent_time: currentTime.toISOString() }),
+        last_sent_time: currentTime.toISOString(),
       })
       .eq("submission_id", submission.submission_id),
 
