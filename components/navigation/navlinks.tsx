@@ -1,6 +1,10 @@
 "use client";
 
-import { PlusIcon, PencilSquareIcon } from "@heroicons/react/24/outline";
+import {
+  PlusIcon,
+  PencilSquareIcon,
+  AcademicCapIcon,
+} from "@heroicons/react/24/outline";
 import { usePathname } from "next/navigation";
 import clsx from "clsx";
 import Link from "next/link";
@@ -9,6 +13,7 @@ import Link from "next/link";
 // Depending on the size of the application, this would be stored in a database.
 const links = [
   { name: "Create", href: "/create", icon: PlusIcon },
+  { name: "Quiz", href: "/quiz", icon: AcademicCapIcon },
   {
     name: "Manage",
     href: "/manage",
