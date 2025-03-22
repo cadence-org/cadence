@@ -94,3 +94,38 @@ Please file feedback and issues over on the [Supabase GitHub org](https://github
 - [Next.js Subscription Payments Starter](https://github.com/vercel/nextjs-subscription-payments)
 - [Cookie-based Auth and the Next.js 13 App Router (free course)](https://youtube.com/playlist?list=PL5S4mPUpp4OtMhpnp93EFSo42iQ40XjbF)
 - [Supabase Auth and the Next.js App Router](https://github.com/supabase/supabase/tree/master/examples/auth/nextjs)
+
+## Quiz Feature
+
+The Cadence application includes a quiz feature that transforms content into a series of questions and answers, delivered at the user's chosen cadence.
+
+### How It Works
+
+1. Users upload content (text, URLs, or PDFs) on the `/quiz` page
+2. Our system processes the content and generates quiz questions and answers
+3. Questions and answers are delivered to users via text messages at their chosen cadence
+4. First a question is sent, then after one cadence period, the answer to that question, followed by a new question
+
+### Database Tables
+
+The quiz feature uses two main tables:
+
+- `quiz_submissions`: Stores user submissions with their content and cadence settings
+  - Includes `is_answer_pending` flag to track whether to send a question or answer next
+- `quiz_questions`: Stores the generated questions and answers
+  - Questions are linked in a sequence with `next_question_id` pointing to the next question
+
+### Cron Jobs
+
+Two cron jobs handle the quiz feature:
+
+- `/api/process-quiz`: Runs every 5 minutes to process new quiz submissions
+- `/api/send-quiz`: Runs at intervals to send questions and answers based on cadence
+
+### Troubleshooting
+
+If quiz messages stop sending:
+
+1. Verify that `is_answer_pending` is properly set in the database
+2. Check that the cron jobs are running correctly
+3. Verify question sequences are properly linked with `next_question_id`

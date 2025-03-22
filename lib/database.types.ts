@@ -104,6 +104,7 @@ export type Database = {
           cadence: string;
           created_at: string | null;
           first_question_id: string | null;
+          is_answer_pending: boolean | null;
           last_sent_time: string | null;
           question_to_send: string | null;
           reading_level: string | null;
@@ -121,6 +122,7 @@ export type Database = {
           cadence: string;
           created_at?: string | null;
           first_question_id?: string | null;
+          is_answer_pending?: boolean | null;
           last_sent_time?: string | null;
           question_to_send?: string | null;
           reading_level?: string | null;
@@ -138,6 +140,7 @@ export type Database = {
           cadence?: string;
           created_at?: string | null;
           first_question_id?: string | null;
+          is_answer_pending?: boolean | null;
           last_sent_time?: string | null;
           question_to_send?: string | null;
           reading_level?: string | null;
