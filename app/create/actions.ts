@@ -169,6 +169,7 @@ export async function handleSubmission(
   const cadence = formData.get("cadence") as string;
   const repeat = formData.get("repeat") as string;
   const reading_level = formData.get("reading_level") as string;
+  const is_quiz = formData.get("is_quiz") === "true";
 
   try {
     const {
@@ -232,23 +233,45 @@ export async function handleSubmission(
 
     // Create initial submission record
     // Note: message_to_send is null by default, which indicates it needs processing
-    const { error: submissionError } = await supabase
-      .from("submissions")
-      .insert({
-        submission_id,
-        user_id: user.id,
-        text_field: youtube_url?.trim() || url?.trim() || raw_text || null,
-        uploaded_files: file_names ?? [],
-        cadence,
-        repeat,
-        timezone: userData.timezone,
-        message_to_send: null,
-        first_message_id: null,
-        start_time: startTime.toISOString(),
-        reading_level,
-      });
+    if (is_quiz) {
+      // Create a quiz submission
+      const { error: submissionError } = await supabase
+        .from("quiz_submissions")
+        .insert({
+          submission_id,
+          user_id: user.id,
+          text_field: youtube_url?.trim() || url?.trim() || raw_text || null,
+          uploaded_files: file_names ?? [],
+          cadence,
+          repeat,
+          timezone: userData.timezone,
+          question_to_send: null,
+          first_question_id: null,
+          start_time: startTime.toISOString(),
+          reading_level,
+        });
 
-    if (submissionError) throw submissionError;
+      if (submissionError) throw submissionError;
+    } else {
+      // Create a regular submission
+      const { error: submissionError } = await supabase
+        .from("submissions")
+        .insert({
+          submission_id,
+          user_id: user.id,
+          text_field: youtube_url?.trim() || url?.trim() || raw_text || null,
+          uploaded_files: file_names ?? [],
+          cadence,
+          repeat,
+          timezone: userData.timezone,
+          message_to_send: null,
+          first_message_id: null,
+          start_time: startTime.toISOString(),
+          reading_level,
+        });
+
+      if (submissionError) throw submissionError;
+    }
 
     return { success: true, submission_id };
   } catch (error) {

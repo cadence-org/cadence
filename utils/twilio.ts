@@ -13,7 +13,11 @@ function getTwilioClient() {
   return twilioClient;
 }
 
-export async function sendTextMessage(to: string, submission: Submission, message: string) {
+export async function sendTextMessage(
+  to: string,
+  submission: any,
+  message: string
+) {
   try {
     const client = getTwilioClient();
     const formattedMessage = `${message}\n\n${submission.title ? `Title: ${submission.title}\n` : ""}Sent by: Cadence`;

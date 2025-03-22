@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/tooltip";
 import { InformationCircleIcon } from "@heroicons/react/24/outline";
 import { useRouter } from "next/navigation";
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4 } from "uuid";
 import { createClient } from "@/utils/supabase/client";
 
 const FIVE_MB = 5 * 1024 * 1024;
@@ -133,6 +133,7 @@ function isValidURL(url: string) {
 interface UploadFormProps {
   initialUserName: string;
   isSubscribed: boolean;
+  isQuiz?: boolean;
 }
 
 // ----------------------
@@ -141,6 +142,7 @@ interface UploadFormProps {
 export default function UploadForm({
   initialUserName,
   isSubscribed,
+  isQuiz = false,
 }: UploadFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -173,6 +175,11 @@ export default function UploadForm({
       const textContent = data.text?.trim() || "";
       const submission_id = uuidv4();
       formData.append("submission_id", submission_id);
+
+      // Add is_quiz flag if this is a quiz submission
+      if (isQuiz) {
+        formData.append("is_quiz", "true");
+      }
 
       // Distinguish text vs. URL vs. YouTube
       if (textContent) {
@@ -248,15 +255,19 @@ export default function UploadForm({
   // ----------------------
   return (
     <div className="flex-1 w-full max-w-[520px] flex flex-col gap-12">
-      <div className="w-full flex flex-row text-center justify-around font-bold text-4xl">
-        {greeting}
-      </div>
-      <div className="w-full flex flex-row justify-around">
-        <p className="text-center">
-          Upload your content and we will deliver them to you in bite-sized
-          texts at an interval of your choice.
-        </p>
-      </div>
+      {!isQuiz && (
+        <>
+          <div className="w-full flex flex-row text-center justify-around font-bold text-4xl">
+            {greeting}
+          </div>
+          <div className="w-full flex flex-row justify-around">
+            <p className="text-center">
+              Upload your content and we will deliver them to you in bite-sized
+              texts at an interval of your choice.
+            </p>
+          </div>
+        </>
+      )}
 
       <Form {...form}>
         <form
@@ -316,9 +327,7 @@ export default function UploadForm({
                   const validFiles = acceptedFiles.filter(
                     (file) =>
                       file.type === "application/pdf" &&
-                      !currentItems.some(
-                        (f) => f.name === file.name
-                      )
+                      !currentItems.some((f) => f.name === file.name)
                   );
                   const newFiles = [...currentItems, ...validFiles];
                   // Set new files
@@ -434,12 +443,8 @@ export default function UploadForm({
                       <SelectGroup>
                         <SelectLabel>Once every...</SelectLabel>
                         <SelectItem value="receive-daily">Day</SelectItem>
-                        <SelectItem value="receive-12">
-                          12 hours
-                        </SelectItem>
-                        <SelectItem value="receive-6">
-                          6 hours
-                        </SelectItem>
+                        <SelectItem value="receive-12">12 hours</SelectItem>
+                        <SelectItem value="receive-6">6 hours</SelectItem>
                         <SelectItem value="receive-1" disabled={!isSubscribed}>
                           1 hour {!isSubscribed && "(Pro ✨)"}
                         </SelectItem>
@@ -459,7 +464,7 @@ export default function UploadForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>
-                Do you want these texts to be sent more than once?
+                  Do you want these texts to be sent more than once?
                 </FormLabel>
                 <FormControl>
                   <Select onValueChange={field.onChange} value={field.value}>
@@ -475,7 +480,9 @@ export default function UploadForm({
                         >
                           Yes, repeat {!isSubscribed && "(Pro ✨)"}
                         </SelectItem>
-                        <SelectItem value="do-not-repeat">No, send only once</SelectItem>
+                        <SelectItem value="do-not-repeat">
+                          No, send only once
+                        </SelectItem>
                       </SelectGroup>
                     </SelectContent>
                   </Select>
@@ -492,7 +499,8 @@ export default function UploadForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>
-                How would you like the information in your texts to be presented?
+                  How would you like the information in your texts to be
+                  presented?
                 </FormLabel>
                 <FormControl>
                   <Select onValueChange={field.onChange} value={field.value}>
@@ -502,11 +510,7 @@ export default function UploadForm({
                     <SelectContent>
                       <SelectGroup>
                         <SelectLabel>Reading Level</SelectLabel>
-                        <SelectItem
-                          value="simple"
-                        >
-                          Simple
-                        </SelectItem>
+                        <SelectItem value="simple">Simple</SelectItem>
                         <SelectItem value="balanced">Balanced</SelectItem>
                         <SelectItem value="detailed">Detailed</SelectItem>
                       </SelectGroup>
