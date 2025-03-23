@@ -197,7 +197,7 @@ export async function processQuizMessages(
                 );
 
                 // Create a combined message with answer and next question
-                messageText = `Answer: ${currentQuestion.answer_text}\n\nHere is your next question:\n${nextQuestion.question_text}`;
+                messageText = `Question: "${currentQuestion.question_text}"\n\nAnswer: ${currentQuestion.answer_text}\n\nHere is your next question:\n${nextQuestion.question_text}`;
                 nextQuestionId = currentQuestion.next_question_id;
 
                 console.log(
@@ -211,7 +211,7 @@ export async function processQuizMessages(
                 );
 
                 // Create a combined message with answer and the first question
-                messageText = `Answer: ${currentQuestion.answer_text}\n\nHere is your next question:\n${firstQuestion.question_text}`;
+                messageText = `Question: "${currentQuestion.question_text}"\n\nAnswer: ${currentQuestion.answer_text}\n\nHere is your next question:\n${firstQuestion.question_text}`;
                 nextQuestionId = submission.first_question_id;
 
                 console.log(
@@ -219,7 +219,7 @@ export async function processQuizMessages(
                 );
               } else {
                 // This is the last answer, don't include a next question
-                messageText = `Answer: ${currentQuestion.answer_text}\n\nYou've completed this quiz! Feel free to start a new one.`;
+                messageText = `Question: "${currentQuestion.question_text}"\n\nAnswer: ${currentQuestion.answer_text}\n\nYou've completed this quiz! Feel free to start a new one.`;
                 nextQuestionId = null;
 
                 console.log(
@@ -235,9 +235,17 @@ export async function processQuizMessages(
                   .update({
                     question_to_send: nextQuestionId,
                     last_sent_time: currentTime.toISOString(),
-                    is_answer_pending: false, // Next time we'll send a question answer
+                    is_answer_pending: true, // Set to true so next time we only send an answer+question, not just the question
                   })
                   .eq("submission_id", submission.submission_id);
+
+                // Also update the question as sent
+                await supabase
+                  .from("quiz_questions")
+                  .update({
+                    last_sent_time: currentTime.toISOString(),
+                  })
+                  .eq("question_id", nextQuestionId);
               } else {
                 // Just sending the final answer
                 await supabase
