@@ -253,6 +253,7 @@ export async function processQuizMessages(
                   .update({
                     last_sent_time: currentTime.toISOString(),
                     is_answer_pending: false,
+                    question_to_send: null, // Set to null to prevent further processing
                   })
                   .eq("submission_id", submission.submission_id);
               }
